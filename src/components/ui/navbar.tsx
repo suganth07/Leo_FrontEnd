@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { Camera, Settings, Eye, EyeOff } from "lucide-react"
+import { Camera, Settings, Eye, EyeOff, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -48,13 +48,13 @@ export default function Navbar() {
 
     if (password === ADMIN_PASSWORD) {
       // Set authentication state
-      sessionStorage.setItem('isAuthenticated', 'true')
-      toast.success("Access granted! Redirecting to admin panel...")
       setShowPasswordDialog(false)
       setPassword("")
       setTimeout(() => {
         router.push("/admin")
       }, 1000)
+      sessionStorage.setItem('isAuthenticated', 'true')
+      toast.success("Access granted! Redirecting to admin panel...")
     } else {
       toast.error("Incorrect password. Please try again.")
     }
@@ -86,7 +86,6 @@ export default function Navbar() {
                   <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                     Leo Studio
                   </h1>
-                  <p className="text-xs text-muted-foreground">Client Portal</p>
                 </div>
               </div>
             </div>
@@ -103,30 +102,11 @@ export default function Navbar() {
                 disabled={isOnAdminPage}
                 className="flex items-center gap-2 h-10"
               >
-                <Settings className="h-4 w-4" />
+                <User className="h-4 w-4" />
                 <span className="hidden sm:inline">
                   {isOnAdminPage ? 'Admin (Active)' : 'Admin'}
                 </span>
               </Button>
-              
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-10 w-10">
-                    <Settings className="h-4 w-4" />
-                    <span className="sr-only">Settings</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem 
-                    onClick={handleAdminAccess} 
-                    className="cursor-pointer"
-                    disabled={isOnAdminPage}
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    {isOnAdminPage ? 'Admin Panel (Active)' : 'Admin Panel'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
         </div>

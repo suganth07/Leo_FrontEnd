@@ -10,13 +10,13 @@ export default function LogoutButton() {
 
   const handleLogout = () => {
     // Clear authentication state
-    sessionStorage.removeItem('isAuthenticated');
-    toast.success("Logged out successfully");
     
     // Redirect to home page
     setTimeout(() => {
       router.push('/');
     }, 1000);
+    sessionStorage.removeItem('isAuthenticated');
+    toast.success("Logged out successfully");
   };
 
   return (
