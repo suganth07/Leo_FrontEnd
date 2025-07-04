@@ -6,17 +6,21 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 interface PasswordVerificationProps {
   onVerifyPassword: (password: string) => void;
+  isLoading?: boolean;
 }
 
-const PasswordVerification = ({ onVerifyPassword }: PasswordVerificationProps) => {
+const PasswordVerification = ({ onVerifyPassword, isLoading = false }: PasswordVerificationProps) => {
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const handleVerify = () => {
-    onVerifyPassword(password);
+    if (!isLoading && password.trim()) {
+      onVerifyPassword(password);
+    }
   };
 
   return (
@@ -37,7 +41,8 @@ const PasswordVerification = ({ onVerifyPassword }: PasswordVerificationProps) =
             placeholder="Enter access code"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
+            onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleVerify()}
+            disabled={isLoading}
             className="pr-12"
           />
           <Button
@@ -57,11 +62,18 @@ const PasswordVerification = ({ onVerifyPassword }: PasswordVerificationProps) =
         
         <Button
           onClick={handleVerify}
+          disabled={isLoading || !password.trim()}
           className="w-full"
           size="sm"
         >
-          <Lock className="w-4 h-4 mr-2" />
-          Access Gallery
+          {isLoading ? (
+            <LoadingSpinner size="sm" text="Verifying..." />
+          ) : (
+            <>
+              <Lock className="w-4 h-4 mr-2" />
+              Access Gallery
+            </>
+          )}
         </Button>
       </CardContent>
     </Card>

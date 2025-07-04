@@ -1,22 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PageLoadingScreen from "@/components/ui/PageLoadingScreen";
 
 export default function Home() {
   const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(true);
 
   useEffect(() => {
-    // Redirect to client page on load
-    router.push("/client");
+    // Add a brief delay for a smooth loading experience
+    const timer = setTimeout(() => {
+      router.push("/client");
+    }, 1200);
+
+    return () => clearTimeout(timer);
   }, [router]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-        <p className="mt-4 text-sm text-muted-foreground">Redirecting to client portal...</p>
-      </div>
-    </div>
+    <PageLoadingScreen 
+      message="Welcome to Leo's Photography"
+    />
   );
 }

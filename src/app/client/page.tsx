@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 import { toast } from "sonner";
 import AnimatedBackground from "@/components/ui/AnimatedBackground";
 import Navbar from "@/components/ui/navbar";
+import PageLoadingScreen from "@/components/ui/PageLoadingScreen";
 
 // Components
 import ClientHeader from "./components/ClientHeader";
@@ -48,10 +49,14 @@ export default function ClientPage() {
   const [matchLoading, setMatchLoading] = useState(false);
   const [folderPassword, setFolderPassword] = useState("");
   const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
     async function fetchFolders() {
       try {
+        setPageLoading(true);
         const res = await axios.get<{ folders: { id: string; name: string }[] }>(
           `${BASE_URL}/api/folders`
         );
@@ -60,10 +65,22 @@ export default function ClientPage() {
       } catch (error) {
         console.error("Error fetching folders:", error);
         toast.error("Unable to load folders");
+      } finally {
+        // Add a small delay for smooth loading experience
+        setTimeout(() => {
+          setPageLoading(false);
+          setInitialLoadComplete(true);
+        }, 800);
       }
     }
     if (BASE_URL) fetchFolders();
-    else console.warn("BASE_URL is not set");
+    else {
+      console.warn("BASE_URL is not set");
+      setTimeout(() => {
+        setPageLoading(false);
+        setInitialLoadComplete(true);
+      }, 500);
+    }
   }, [BASE_URL]);
 
   useEffect(() => {
@@ -181,6 +198,8 @@ export default function ClientPage() {
     }
 
     try {
+      setPasswordLoading(true);
+      
       if (!supabase) {
         toast.error("Database connection not available.");
         return;
@@ -199,6 +218,9 @@ export default function ClientPage() {
 
       console.log("Password verification for folder:", selectedFolderId);
 
+      // Add a small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 600));
+
       if (data.password === password) {
         toast.success("Access granted!");
         setIsPasswordVerified(true);
@@ -210,6 +232,8 @@ export default function ClientPage() {
     } catch (err) {
       console.error("Error verifying password:", err);
       toast.error("Something went wrong.");
+    } finally {
+      setPasswordLoading(false);
     }
   }
 
@@ -280,45 +304,55 @@ export default function ClientPage() {
       <AnimatedBackground />
       <Toaster position="top-center" />
       
+      {/* Page Loading Screen */}
+      {pageLoading && (
+        <PageLoadingScreen 
+          message="Loading client portal..." 
+        />
+      )}
+      
       {/* Navbar */}
       <Navbar />
       
       <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Client Header */}
-          <ClientHeader />
+          {initialLoadComplete && <ClientHeader />}
 
           {/* Portfolio Selection */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="grid lg:grid-cols-3 gap-6"
-          >
-            {/* Portfolio Selection Card */}
-            <PortfolioSelection 
-              folders={folders}
-              selectedFolderId={selectedFolderId}
-              onFolderChange={handleFolderChange}
-            />
-
-            {/* Password Verification Card */}
-            {selectedFolderId && !isPasswordVerified && (
-              <PasswordVerification onVerifyPassword={verifyFolderPassword} />
-            )}
-
-            {/* Gallery Stats Card */}
-            {selectedFolderId && isPasswordVerified && (
-              <GalleryStats 
-                totalImages={allImages.length}
-                filteredImages={filteredImages.length}
-                selectedCount={selectedImages.size}
+          {initialLoadComplete && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="grid lg:grid-cols-3 gap-6"
+            >
+              {/* Portfolio Selection Card */}
+              <PortfolioSelection 
+                folders={folders}
+                selectedFolderId={selectedFolderId}
+                onFolderChange={handleFolderChange}
               />
-            )}
-          </motion.div>
+
+              {/* Password Verification Card */}
+              {selectedFolderId && !isPasswordVerified && (
+                <PasswordVerification 
+                  onVerifyPassword={verifyFolderPassword}
+                  isLoading={passwordLoading}
+                />
+              )}              {/* Gallery Stats Card */}
+              {selectedFolderId && isPasswordVerified && (
+                <GalleryStats 
+                  totalImages={allImages.length}
+                  filteredImages={filteredImages.length}
+                  selectedCount={selectedImages.size}
+                />
+              )}
+            </motion.div>
+          )}
 
           {/* AI Photo Finder & Controls */}
-          {selectedFolderId && isPasswordVerified && (
+          {initialLoadComplete && selectedFolderId && isPasswordVerified && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

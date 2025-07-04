@@ -19,6 +19,7 @@ import UploadsTab from "./components/UploadsTab";
 import SettingsTab from "./components/SettingsTab";
 import ImageGallery from "./components/ImageGallery";
 import LightboxModal from "./components/LightboxModal";
+import PageLoadingScreen from "@/components/ui/PageLoadingScreen";
 
 
 // Supabase configuration
@@ -56,14 +57,19 @@ export default function AdminPage() {
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const qrRef = useRef<HTMLCanvasElement>(null);
   
   // Authentication check - redirect if not authenticated
   useEffect(() => {
     const authState = sessionStorage.getItem('isAuthenticated');
     if (!authState || authState !== 'true') {
-      toast.error("Access denied. Please authenticate first.");
-      router.push('/');
+      setPageLoading(true);
+      setTimeout(() => {
+        toast.error("Access denied. Please authenticate first.");
+        router.push('/');
+      }, 1000);
     } else {
       setIsAuthenticated(true);
       // Fetch folders from Google Drive
@@ -74,13 +80,18 @@ export default function AdminPage() {
   // Fetch folders from Google Drive backend API
   const fetchFolders = async () => {
     try {
+      setPageLoading(true);
       const response = await axios.get(`${BASE_URL}/api/folders`);
       setFolders(response.data.folders || []);
     } catch (error) {
       console.error("Error fetching folders:", error);
       toast.error("Failed to load folders from Google Drive");
       // Fallback to mock data for UI purposes if API fails
-
+    } finally {
+      setTimeout(() => {
+        setPageLoading(false);
+        setInitialLoadComplete(true);
+      }, 800);
     }
   };
 
@@ -501,45 +512,61 @@ export default function AdminPage() {
       <AnimatedBackground />
       <Toaster position="top-center" />
       
+      {/* Page Loading Screen */}
+      {pageLoading && (
+        <PageLoadingScreen 
+          message={isAuthenticated === false ? "Access denied - redirecting..." : "Loading admin panel..."} 
+        />
+      )}
+      
       {/* Navbar */}
       <Navbar />
       
       <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Admin Header */}
-          <AdminHeader 
-            isLoading={isLoading}
-            handleRefresh={handleRefresh}
-            router={router}
-          />
+          {initialLoadComplete && (
+            <AdminHeader 
+              isLoading={isLoading}
+              handleRefresh={handleRefresh}
+              router={router}
+            />
+          )}
           
           {/* Navigation Tabs */}
-          <NavigationTabs 
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-          />
+          {initialLoadComplete && (
+            <NavigationTabs 
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+            />
+          )}
           
           {/* Portfolio Selection Section */}
-          <PortfolioSelection
-            folders={folders}
-            selectedPortfolioId={selectedPortfolioId}
-            setSelectedPortfolioId={setSelectedPortfolioId}
-          />
+          {initialLoadComplete && (
+            <PortfolioSelection
+              folders={folders}
+              selectedPortfolioId={selectedPortfolioId}
+              setSelectedPortfolioId={setSelectedPortfolioId}
+            />
+          )}
 
           {/* Confirmation Dialogs */}
-          <ConfirmationDialogs
-            showConfirmation={showConfirmation}
-            showDeleteConfirmation={showDeleteConfirmation}
-            isCreatingEncoding={isCreatingEncoding}
-            deleteLoading={deleteLoading}
-            handleConfirmYes={handleConfirmYes}
-            handleConfirmNo={handleConfirmNo}
-            confirmDeleteEncoding={confirmDeleteEncoding}
-            setShowDeleteConfirmation={setShowDeleteConfirmation}
-          />
+          {initialLoadComplete && (
+            <ConfirmationDialogs
+              showConfirmation={showConfirmation}
+              showDeleteConfirmation={showDeleteConfirmation}
+              isCreatingEncoding={isCreatingEncoding}
+              deleteLoading={deleteLoading}
+              handleConfirmYes={handleConfirmYes}
+              handleConfirmNo={handleConfirmNo}
+              confirmDeleteEncoding={confirmDeleteEncoding}
+              setShowDeleteConfirmation={setShowDeleteConfirmation}
+            />
+          )}
           
           {/* Content Area */}
-          <div className="py-4">
+          {initialLoadComplete && (
+            <div className="py-4">
             {/* Dashboard Tab */}
             {activeTab === "dashboard" && (
               <DashboardTab
@@ -580,48 +607,57 @@ export default function AdminPage() {
               />
             )}
           </div>
+          )}
 
           {/* Image Gallery Section - Shows when portfolio is selected */}
-          <ImageGallery
-            selectedPortfolioId={selectedPortfolioId}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            filteredImages={filteredImages}
-            allImages={allImages}
-            displayImages={displayImages}
-            selectedImages={selectedImages}
-            setSelectedImages={setSelectedImages}
-            downloadLoading={downloadLoading}
-            setEnlargedIndex={setEnlargedIndex}
-            toggleSelectImage={toggleSelectImage}
-            handleDownloadSelected={() => handleDownloadSelected()}
-            hasMatchedImages={displayImages.length !== allImages.length && displayImages.length > 0}
-          />
+          {initialLoadComplete && (
+            <ImageGallery
+              selectedPortfolioId={selectedPortfolioId}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              filteredImages={filteredImages}
+              allImages={allImages}
+              displayImages={displayImages}
+              selectedImages={selectedImages}
+              setSelectedImages={setSelectedImages}
+              downloadLoading={downloadLoading}
+              setEnlargedIndex={setEnlargedIndex}
+              toggleSelectImage={toggleSelectImage}
+              handleDownloadSelected={() => handleDownloadSelected()}
+              hasMatchedImages={displayImages.length !== allImages.length && displayImages.length > 0}
+            />
+          )}
           
           {/* Image Lightbox Modal */}
-          <LightboxModal
-            enlargedIndex={enlargedIndex}
-            filteredImages={filteredImages}
-            selectedImages={selectedImages}
-            setEnlargedIndex={setEnlargedIndex}
-            toggleSelectImage={toggleSelectImage}
-            handleDownloadSelected={handleDownloadSelected}
-          />
+          {initialLoadComplete && (
+            <LightboxModal
+              enlargedIndex={enlargedIndex}
+              filteredImages={filteredImages}
+              selectedImages={selectedImages}
+              setEnlargedIndex={setEnlargedIndex}
+              toggleSelectImage={toggleSelectImage}
+              handleDownloadSelected={handleDownloadSelected}
+            />
+          )}
 
           {/* Hidden File Input */}
-          <input
-            type="file"
-            id="file-input"
-            accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="hidden"
-          />
+          {initialLoadComplete && (
+            <input
+              type="file"
+              id="file-input"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="hidden"
+            />
+          )}
           
           {/* Footer */}
-          <div className="mt-16 text-center text-muted-foreground text-sm space-y-1">
-            <p>© {new Date().getFullYear()} Leo Photography Studio. Admin Panel v1.0</p>
-            <p className="text-xs">Built with Next.js and shadcn/ui</p>
-          </div>
+          {initialLoadComplete && (
+            <div className="mt-16 text-center text-muted-foreground text-sm space-y-1">
+              <p>© {new Date().getFullYear()} Leo Photography Studio. Admin Panel v1.0</p>
+              <p className="text-xs">Built with Next.js and shadcn/ui</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
