@@ -332,7 +332,7 @@ export default function ImageGallery({
                 <p className="text-muted-foreground max-w-md mx-auto">
                   {searchTerm 
                     ? `No images match "${searchTerm}". Try adjusting your search.`
-                    : "This portfolio is empty or images are still loading."
+                    : "This portfolio is empty"
                   }
                 </p>
               </div>

@@ -21,11 +21,14 @@ import ImageGallery from "./components/ImageGallery";
 import LightboxModal from "./components/LightboxModal";
 import PageLoadingScreen from "@/components/ui/PageLoadingScreen";
 
+// Google Drive integration
+import { useDriveData } from "@/lib/hooks/useDriveData";
 
 // Supabase configuration
 const NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'fallback-key';
 const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fallback.supabase.co';
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+const PHOTOS_FOLDER_ID = process.env.NEXT_PUBLIC_PHOTOS_FOLDER_ID;
 
 const supabase = createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
@@ -36,10 +39,23 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
+  // Google Drive integration with direct API access
+  const {
+    folders,
+    images: allImages,
+    isLoadingFolders,
+    isLoadingImages,
+    error: driveError,
+    fetchImages: fetchImagesFromDrive,
+    clearImages,
+    progress
+  } = useDriveData({ 
+    photosRootFolderId: PHOTOS_FOLDER_ID,
+    enableAutoFetch: true // Enable auto-fetch after authentication
+  });
+
   // Enhanced state variables for new functionality
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [selectedPortfolioId, setSelectedPortfolioId] = useState<string>("");
-  const [allImages, setAllImages] = useState<{ id: string; name: string; url: string }[]>([]);
   const [displayImages, setDisplayImages] = useState<{ id: string; name: string; url: string }[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -72,40 +88,90 @@ export default function AdminPage() {
       }, 1000);
     } else {
       setIsAuthenticated(true);
-      // Fetch folders from Google Drive
-      fetchFolders();
+      // Initialize Google Drive data loading
+      initializeDriveData();
     }
   }, [router]);
 
-  // Fetch folders from Google Drive backend API
-  const fetchFolders = async () => {
+  // Initialize Drive data after authentication
+  const initializeDriveData = async () => {
     try {
-      setPageLoading(true);
-      const response = await axios.get(`${BASE_URL}/api/folders`);
-      setFolders(response.data.folders || []);
+      if (!PHOTOS_FOLDER_ID) {
+        toast.error("Photos folder ID not configured");
+        setPageLoading(false);
+        setInitialLoadComplete(true);
+        return;
+      }
+      
+      // The hook will automatically fetch folders since enableAutoFetch is true
+      console.log("Google Drive integration initialized with folder ID:", PHOTOS_FOLDER_ID);
     } catch (error) {
-      console.error("Error fetching folders:", error);
-      toast.error("Failed to load folders from Google Drive");
-      // Fallback to mock data for UI purposes if API fails
+      console.error('Error initializing Drive data:', error);
+      toast.error("Failed to connect to Google Drive");
     } finally {
       setTimeout(() => {
         setPageLoading(false);
         setInitialLoadComplete(true);
-      }, 800);
+      }, 1500); // Give more time for the hook to load folders
     }
   };
 
   // Fetch images when portfolio is selected
   useEffect(() => {
     if (selectedPortfolioId) {
-      fetchImages(selectedPortfolioId);
+      // Use direct Google Drive API for fetching images
+      loadImagesFromDrive(selectedPortfolioId);
       checkEncodingStatus(selectedPortfolioId);
       setPklExists(false); // Reset pkl exists state when portfolio changes
     } else {
       setEncodingStatus(null);
       setPklExists(false);
+      clearImages(); // Clear images when no portfolio selected
     }
   }, [selectedPortfolioId]);
+
+  // Load images using direct Google Drive API
+  const loadImagesFromDrive = async (folderId: string) => {
+    try {
+      console.log(`🚀 Loading images directly from Google Drive for folder: ${folderId}`);
+      
+      // Use batch fetching for large datasets with progress indication
+      await fetchImagesFromDrive(folderId, true);
+      
+      // Note: Success message will be shown in useEffect when allImages updates
+      console.log(`Successfully initiated image loading from direct API`);
+    } catch (error) {
+      console.error('Error loading images from Drive:', error);
+      toast.error("Failed to load images from Google Drive");
+    }
+  };
+
+  // Show success message when images are actually loaded
+  useEffect(() => {
+    if (allImages.length > 0 && selectedPortfolioId) {
+      toast.success(`✅ Loaded ${allImages.length} images directly from Google Drive!`);
+    }
+  }, [allImages, selectedPortfolioId]);
+
+  // Handle Google Drive errors
+  useEffect(() => {
+    if (driveError) {
+      console.error('Google Drive API Error:', driveError);
+      toast.error(`Google Drive connection failed`);
+    }
+  }, [driveError]);
+
+  // Handle loading states and show appropriate messages
+
+  // Remove the backend fallback completely since we want only frontend fetching
+  // const fetchImagesViaBackend = async (folderId: string) => {
+  //   // This function has been removed to use only direct Google Drive API
+  // };
+
+  // Update display images when allImages changes
+  useEffect(() => {
+    setDisplayImages(allImages);
+  }, [allImages]);
 
   // Check if encoding exists for the selected folder
   const checkEncodingStatus = async (folderId: string) => {
@@ -143,21 +209,6 @@ export default function AdminPage() {
 
   function getGoogleDriveViewUrl(fileId: string) {
     return `https://drive.google.com/uc?export=view&id=${fileId}`;
-  }
-
-  async function fetchImages(folderId: string) {
-    try {
-      const response = await axios.get(`${BASE_URL}/api/images?folder_id=${folderId}`);
-      const transformedImages = response.data.images?.map((img: any) => ({
-        ...img,
-        url: getGoogleDriveViewUrl(img.id),
-      })) || [];
-      setAllImages(transformedImages);
-      setDisplayImages(transformedImages);
-    } catch (error) {
-      console.error("Error fetching images:", error);
-      toast.error("Failed to load images");
-    }
   }
 
   const handleSetFolderPassword = async () => {
@@ -236,13 +287,14 @@ export default function AdminPage() {
   const createEncoding = async () => {
     setIsCreatingEncoding(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/images?folder_id=${selectedPortfolioId}`);
-      const data = await res.json();
-      const images = data.images?.map((img: any) => ({
+      // Use already loaded images from direct Drive API instead of making another backend call
+      const images = allImages.map((img) => ({
         id: img.id,
         name: img.name,
-        path_or_url: getGoogleDriveViewUrl(img.id),
-      })) || [];
+        path_or_url: img.url,
+      }));
+
+      console.log(`Creating encoding for ${images.length} images using direct Drive data`);
 
       const createRes = await fetch(`${BASE_URL}/api/create_encoding`, {
         method: "POST",
@@ -408,11 +460,11 @@ export default function AdminPage() {
               const data = JSON.parse(jsonLine);
               if (data.images) {
                 const matchedImageIds = data.images.map((img: any) => img.id);
-                const res = await fetch(`${BASE_URL}/api/images?folder_id=${selectedPortfolioId}`);
-                const imageData = await res.json();
-                matchedImages = imageData.images.filter((img: any) =>
+                // Use already loaded images from direct Drive API instead of making another backend call
+                matchedImages = allImages.filter((img) =>
                   matchedImageIds.includes(img.id)
                 );
+                console.log(`Found ${matchedImages.length} matched images using direct Drive data`);
               }
             } catch (parseError) {
               console.error("Error parsing SSE data:", parseError);
@@ -488,9 +540,8 @@ export default function AdminPage() {
 
   const handleRefresh = () => {
     setIsLoading(true);
-    // Simulate API call
+    // Simulate API call without showing toast
     setTimeout(() => {
-      toast.success("Dashboard data refreshed");
       setIsLoading(false);
     }, 1200);
   };

@@ -27,6 +27,8 @@ interface ImageGalleryProps {
   onShowLightbox: (index: number) => void;
   onSelectAll: (images: Set<string>) => void;
   hasMatchedImages?: boolean;
+  isLoadingImages?: boolean;
+  progress?: { loaded: number; total?: number };
 }
 
 const ImageGallery = ({
@@ -42,8 +44,39 @@ const ImageGallery = ({
   onClearSearch,
   onShowLightbox,
   onSelectAll,
-  hasMatchedImages = false
+  hasMatchedImages = false,
+  isLoadingImages = false,
+  progress = { loaded: 0 },
 }: ImageGalleryProps) => {
+  // Show loading screen only when actively loading images
+  // Don't show if loading is false (completed) even if no images found
+  if (isLoadingImages && allImages.length === 0) {
+    return (
+      <Card className="h-96 flex items-center justify-center">
+        <CardContent className="text-center space-y-4">
+          <div className="flex items-center justify-center space-x-2">
+            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-lg font-medium">Loading photos...</span>
+          </div>
+          {progress.total && progress.total > 0 && (
+            <div className="w-64 mx-auto">
+              <div className="flex justify-between text-sm text-muted-foreground mb-2">
+                <span>Progress</span>
+                <span>{progress.loaded}/{progress.total}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${progress.total ? (progress.loaded / progress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Filter all images based on search term
   const filteredAllImages = allImages.filter(image => 
     image.name.toLowerCase().includes(searchTerm.toLowerCase())

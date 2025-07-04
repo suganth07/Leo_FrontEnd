@@ -22,9 +22,13 @@ import ImageGallery from "./components/ImageGallery";
 import LightboxModal from "./components/LightboxModal";
 import Footer from "./components/Footer";
 
+// Google Drive integration
+import { useDriveData } from "@/lib/hooks/useDriveData";
+
 // Supabase configuration with fallbacks
 const NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const PHOTOS_FOLDER_ID = process.env.NEXT_PUBLIC_PHOTOS_FOLDER_ID;
 
 // Only create supabase client if we have valid environment variables
 const supabase = NEXT_PUBLIC_SUPABASE_URL && NEXT_PUBLIC_SUPABASE_ANON_KEY 
@@ -35,9 +39,22 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 console.log("Client Page - BASE_URL:", BASE_URL);
 
 export default function ClientPage() {
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  // Google Drive integration with direct API access
+  const {
+    folders,
+    images: allImages,
+    isLoadingFolders,
+    isLoadingImages,
+    error: driveError,
+    fetchImages: fetchImagesFromDrive,
+    clearImages,
+    progress: driveProgress
+  } = useDriveData({ 
+    photosRootFolderId: PHOTOS_FOLDER_ID,
+    enableAutoFetch: true // Auto-fetch folders on load for client
+  });
+
   const [selectedFolderId, setSelectedFolderId] = useState<string>("");
-  const [allImages, setAllImages] = useState<{ id: string; name: string; url: string }[]>([]);
   const [displayImages, setDisplayImages] = useState<{ id: string; name: string; url: string }[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -52,36 +69,45 @@ export default function ClientPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [isFolderChanging, setIsFolderChanging] = useState(false);
 
+  // Initialize page loading based on Drive data loading
   useEffect(() => {
-    async function fetchFolders() {
-      try {
-        setPageLoading(true);
-        const res = await axios.get<{ folders: { id: string; name: string }[] }>(
-          `${BASE_URL}/api/folders`
-        );
-        setFolders(res.data.folders ?? []);
-        console.log("Fetched folders:", res.data.folders);
-      } catch (error) {
-        console.error("Error fetching folders:", error);
-        toast.error("Unable to load folders");
-      } finally {
-        // Add a small delay for smooth loading experience
-        setTimeout(() => {
-          setPageLoading(false);
-          setInitialLoadComplete(true);
-        }, 800);
-      }
-    }
-    if (BASE_URL) fetchFolders();
-    else {
-      console.warn("BASE_URL is not set");
+    if (!isLoadingFolders && folders.length > 0) {
       setTimeout(() => {
         setPageLoading(false);
         setInitialLoadComplete(true);
-      }, 500);
+        // toast.success("✨ Connected directly to Google Drive!");
+      }, 800);
+    } else if (!isLoadingFolders && folders.length === 0 && PHOTOS_FOLDER_ID) {
+      // No folders found
+      setTimeout(() => {
+        setPageLoading(false);
+        setInitialLoadComplete(true);
+        // toast.warning("No folders found in Google Drive");
+      }, 800);
     }
-  }, [BASE_URL]);
+  }, [isLoadingFolders, folders, PHOTOS_FOLDER_ID]);
+
+  // Remove the backend fallback completely
+  // const fetchFoldersViaBackend = async () => {
+  //   // This function has been removed to use only direct Google Drive API
+  // };
+
+  // Update display images when allImages changes
+  useEffect(() => {
+    setDisplayImages(allImages);
+    // Always stop folder changing when we get a response (even if empty)
+    if (selectedFolderId && isFolderChanging && !isLoadingImages) {
+      setIsFolderChanging(false);
+      if (allImages.length > 0) {
+        toast.success(`✅ Loaded ${allImages.length} images successfully!`, { duration: 2000 });
+      } else {
+        // Don't show error toast for empty folders, let the gallery show "no images" message
+        console.log("Folder is empty or no images found");
+      }
+    }
+  }, [allImages, selectedFolderId, isFolderChanging, isLoadingImages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -92,14 +118,24 @@ export default function ClientPage() {
       setSelectedFolderId(folderId);
       if (bypass === "1") {
         setIsPasswordVerified(true);
-        fetchImages(folderId);
+        loadImagesFromDrive(folderId);
       }
     }
   }, []);
 
   useEffect(() => {
     if (selectedFolderId && isPasswordVerified) {
-      fetchImages(selectedFolderId);
+      setIsFolderChanging(true);
+      clearImages(); // Clear previous images immediately  
+      setDisplayImages([]); // Clear display images
+      setSelectedImages(new Set()); // Clear selections
+      
+      // Add brief delay for better UX feedback
+      setTimeout(() => {
+        loadImagesFromDrive(selectedFolderId);
+      }, 300);
+    } else if (selectedFolderId && !isPasswordVerified) {
+      setIsFolderChanging(false);
     }
   }, [selectedFolderId, isPasswordVerified]);
 
@@ -119,17 +155,38 @@ export default function ClientPage() {
     image.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  async function fetchImages(folderId: string) {
-    try {
-      const response = await axios.get(`${BASE_URL}/api/images?folder_id=${folderId}`);
-      setAllImages(response.data.images);
-      setDisplayImages(response.data.images);
-      console.log("Fetched images:", response.data.images.length);
-    } catch (error) {
-      console.error("Error fetching images:", error);
-      toast.error("Failed to load images");
+  // Handle Google Drive errors
+  useEffect(() => {
+    if (driveError) {
+      console.error('Google Drive API Error:', driveError);
+      toast.error("Failed to connect to Google Drive");
+      setIsFolderChanging(false); // Stop folder changing state on error
     }
-  }
+  }, [driveError]);
+
+  // Load images using direct Google Drive API
+  const loadImagesFromDrive = async (folderId: string) => {
+    try {
+      console.log(`🚀 Loading images directly from Google Drive for folder: ${folderId}`);
+      
+      // Show loading feedback
+      // toast.info("Loading photos from collection...", { duration: 2000 });
+      
+      // Use batch fetching for large datasets with progress indication
+      await fetchImagesFromDrive(folderId, true);
+      
+      console.log(`Successfully initiated image loading from direct API`);
+    } catch (error) {
+      console.error('Error loading images from Drive:', error);
+      toast.error("Failed to load images from Google Drive");
+      setIsFolderChanging(false); // Stop loading state on error
+    }
+  };
+
+  // Remove the backend fallback completely
+  // const fetchImagesViaBackend = async (folderId: string) => {
+  //   // This function has been removed to use only direct Google Drive API
+  // };
 
   async function handleMatch() {
     if (!file || !selectedFolderId) {
@@ -225,7 +282,7 @@ export default function ClientPage() {
         toast.success("Access granted!");
         setIsPasswordVerified(true);
         setFolderPassword(password);
-        fetchImages(selectedFolderId);
+        loadImagesFromDrive(selectedFolderId);
       } else {
         toast.error("Incorrect password. Try again.");
       }
@@ -290,6 +347,8 @@ export default function ClientPage() {
     setSelectedFolderId(value);
     setIsPasswordVerified(false);
     setDisplayImages([]);
+    setIsFolderChanging(false); // Reset folder changing state
+    setSelectedImages(new Set()); // Clear selections
   };
 
   const handleAIMatch = async () => {
@@ -407,6 +466,8 @@ export default function ClientPage() {
                 onShowLightbox={(index) => setEnlargedIndex(index)}
                 onSelectAll={setSelectedImages}
                 hasMatchedImages={displayImages.length !== allImages.length && displayImages.length > 0}
+                isLoadingImages={isLoadingImages || isFolderChanging}
+                progress={driveProgress}
               />
             </motion.div>
           )}
